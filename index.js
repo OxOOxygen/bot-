@@ -56,8 +56,7 @@ process.on("SIGTERM", () => {
     process.exit();
 });
 
-const SALES_CHANNEL_ID = "11272953526045380679";
-const TRANSCRIPT_CHANNEL_ID = "1272953423846838343"; // Define the sales channel ID here
+const SALES_CHANNEL_ID = "1270065059392917504"; // Define the sales channel ID here
 
 client.once("ready", () => {
     console.log("Bot is online!");
@@ -67,53 +66,310 @@ client.on("interactionCreate", async (interaction) => {
     try {
         if (interaction.isCommand()) {
             if (interaction.commandName === "sell") {
-                // ... (Modal creation code remains the same) ...
+                const modal = new ModalBuilder()
+                    .setCustomId("sellModal")
+                    .setTitle("List an Item for Sale");
+
+                const currencyNameInput = new TextInputBuilder()
+                    .setCustomId("currencyName")
+                    .setLabel("Currency to Buy")
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true);
+
+                const amountInput = new TextInputBuilder()
+                    .setCustomId("amount")
+                    .setLabel("Amount")
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true);
+
+                const currencyInput = new TextInputBuilder()
+                    .setCustomId("currency")
+                    .setLabel("Currency to Sell")
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true);
+
+                const rateInput = new TextInputBuilder()
+                    .setCustomId("rate")
+                    .setLabel("Rate")
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true);
+
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(currencyNameInput),
+                    new ActionRowBuilder().addComponents(amountInput),
+                    new ActionRowBuilder().addComponents(currencyInput),
+                    new ActionRowBuilder().addComponents(rateInput),
+                );
+
                 await interaction.showModal(modal);
             } else if (interaction.commandName === "close") {
-                // ... (Modal creation code remains the same) ...
+                const modal = new ModalBuilder()
+                    .setCustomId("closeModal")
+                    .setTitle("Close a Ticket");
+
+                const ticketIdInput = new TextInputBuilder()
+                    .setCustomId("ticketId")
+                    .setLabel("Ticket ID")
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true);
+
+                const amountInput = new TextInputBuilder()
+                    .setCustomId("closeAmount")
+                    .setLabel("Amount")
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true);
+
+                const currencyInput = new TextInputBuilder()
+                    .setCustomId("closeCurrency")
+                    .setLabel("Currency")
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true);
+
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(ticketIdInput),
+                    new ActionRowBuilder().addComponents(amountInput),
+                    new ActionRowBuilder().addComponents(currencyInput),
+                );
+
                 await interaction.showModal(modal);
             }
         } else if (interaction.isModalSubmit()) {
             if (interaction.customId === "sellModal") {
-                // ... (Modal submission code remains the same) ...
+                const currencyName = interaction.fields.getTextInputValue("currencyName");
+                const amount = interaction.fields.getTextInputValue("amount");
+                const currency = interaction.fields.getTextInputValue("currency");
+                const rate = interaction.fields.getTextInputValue("rate");
+
+                const uniqueId = `item-${Date.now()}`;
+
+                const confirmEmbed = new EmbedBuilder()
+                    .setTitle("Confirm Item Listing")
+                    .setDescription(
+                        `Are you sure you want to list the following item?\n\n` +
+                        `**Currency to Buy:** ${currencyName}\n` +
+                        `**Amount:** ${amount}\n` +
+                        `**Currency to Sell:** ${currency}\n` +
+                        `**Rate:** ${rate}`,
+                    )
+                    .setFooter({
+                        text: 'Click "Yes" to confirm or "No" to cancel.',
+                    });
+
+                const confirmRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`confirmSell-${uniqueId}`)
+                        .setLabel("Yes")
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId(`cancelSell-${uniqueId}`)
+                        .setLabel("No")
+                        .setStyle(ButtonStyle.Danger),
+                );
+
+                const tempMessage = await interaction.reply({
+                    embeds: [confirmEmbed],
+                    components: [confirmRow],
+                    fetchReply: true,
+                    ephemeral: true,
+                });
+                messageData.set(uniqueId, {
+                    currencyName,
+                    amount,
+                    currency,
+                    rate,
+                    creatorId: interaction.user.id,
+                    tempMessageId: tempMessage.id,
+                });
+
+                saveData(); // Save data after setting it
+
                 setTimeout(async () => {
                     try {
-                        await interaction.deleteReply(); // Added await here
+                        await interaction.deleteReply();
                     } catch (error) {
                         console.error("Error deleting modal reply:", error);
                     }
                 }, 10000);
             } else if (interaction.customId === "closeModal") {
-                // ... (Modal submission code remains the same) ...
+                const ticketId = interaction.fields.getTextInputValue("ticketId");
+                const amount = interaction.fields.getTextInputValue("closeAmount");
+                const currency = interaction.fields.getTextInputValue("closeCurrency");
+
+                // Fetch the sales channel by ID
+                const salesChannel = await interaction.guild.channels.fetch(SALES_CHANNEL_ID)
+                    .catch(error => {
+                        console.error('Error fetching sales channel:', error);
+                        return null;
+                    });
+
+                if (salesChannel && salesChannel.isTextBased()) {
+                    const embed = new EmbedBuilder()
+                        .setTitle("🤝Successfull Trade")
+                        .addFields(
+                            { name: "Amount", value: amount, inline: true },
+                            { name: "Currency", value: currency, inline: true }
+                        )
+                        .setFooter({
+                            text: "Latest Trade.",
+                        });
+
+                    await salesChannel.send({ embeds: [embed] });
+                    await interaction.reply({
+                        content: "Ticket details posted to sales channel.",
+                        ephemeral: true,
+                    });
+                } else {
+                    await interaction.reply({
+                        content: "Sales channel not found.",
+                        ephemeral: true,
+                    });
+                }
             }
         } else if (interaction.isButton()) {
             const { customId, user, message } = interaction;
 
             if (customId.startsWith("confirmSell-")) {
-                // ... (Confirm sell code remains the same) ...
+                const uniqueId = customId.replace("confirmSell-", "");
+                await interaction.deferReply({ ephemeral: true });
+
+                const itemInfo = messageData.get(uniqueId);
+
+                if (!itemInfo) {
+                    return interaction.editReply({
+                        content: "Could not find the item listing.",
+                    });
+                }
+
+                    const embed = new EmbedBuilder()
+                    .setTitle("💵 Currency Listing")
+                    .addFields(
+                        { name: "Currency to Buy", value: `\`\`\`Name: ${itemInfo.currencyName}\`\`\``, inline: true },
+                        { name: "Amount", value: `\`\`\`Amount: ${itemInfo.amount}\`\`\``, inline: true },
+                        { name: "Currency to Sell", value: `\`\`\`Currency: ${itemInfo.currency}\`\`\``, inline: true },
+                        { name: "Rate", value: `\`\`\`Rate: ${itemInfo.rate}\`\`\``, inline: true }
+                    )
+
+
+                    .setFooter({
+                        text: "Use the buttons below to buy or delist the item.",
+                    });
+
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`buy-${uniqueId}`)
+                        .setLabel("Buy")
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId(`delist-${uniqueId}`)
+                        .setLabel("Delist")
+                        .setStyle(ButtonStyle.Danger),
+                );
+
+                const newMessage = await interaction.channel.send({
+                    embeds: [embed],
+                    components: [row],
+                });
+
+                // Update messageData with the new message ID
+                messageData.set(uniqueId, {
+                    ...itemInfo,
+                    messageId: newMessage.id,
+                });
+
+                saveData(); // Save data after updating it
+
                 await interaction.editReply({
                     content: "Currency listing confirmed and posted.",
                     ephemeral: true,
                 });
-                // Removed `await interaction.deleteReply()` here
+                await interaction.deleteReply();
             } else if (customId.startsWith("cancelSell-")) {
-                await interaction.editReply({ // Changed to editReply
+                await interaction.reply({
                     content: "Currency listing cancelled.",
                     ephemeral: true,
                 });
+                await interaction.deleteReply();
             } else if (customId.startsWith("buy-")) {
-                // ... (Buy code remains the same) ...
-                await interaction.editReply({ // Changed to editReply
+                const uniqueId = customId.replace("buy-", "");
+
+                const itemInfo = messageData.get(uniqueId);
+
+                if (!itemInfo) {
+                    return interaction.reply({
+                        content: "Item not found.",
+                        ephemeral: true,
+                    });
+                }
+
+                const ticketChannel = await interaction.guild.channels.create({
+                    name: `ticket-${interaction.user.username}`,
+                    type: ChannelType.GuildText,
+                    permissionOverwrites: [
+                        {
+                            id: interaction.guild.id,
+                            deny: [PermissionsBitField.Flags.ViewChannel],
+                        },
+                        {
+                            id: interaction.user.id,
+                            allow: [PermissionsBitField.Flags.ViewChannel],
+                        },
+                        {
+                            id: itemInfo.creatorId,
+                            allow: [PermissionsBitField.Flags.ViewChannel],
+                        },
+                    ],
+                });
+
+                const ticketEmbed = new EmbedBuilder()
+                    .setTitle("Ticket Created")
+                    .setDescription("Please provide details for the transaction.")
+                    .addFields(
+                        { name: "Currency to Buy\n", value: itemInfo.currencyName, inline: true },
+                        { name: "Amount\n", value: itemInfo.amount, inline: true },
+                        { name: "Currency to Sell\n", value: itemInfo.currency, inline: true },
+                        { name: "Rate", value: itemInfo.rate, inline: true },
+                    )
+                    .setFooter({
+                        text: "Use the /close command to close this ticket.",
+                    });
+
+                await ticketChannel.send({
+                    content: `<@${itemInfo.creatorId}>`,
+                    embeds: [ticketEmbed],
+                });
+
+                await interaction.reply({
                     content: "Ticket created successfully.",
                     ephemeral: true,
                 });
+
                 await interaction.followUp({
                     content: `Ticket channel created: ${ticketChannel}`,
                     ephemeral: true,
                 });
             } else if (customId.startsWith("delist-")) {
-                // ... (Delist code remains the same) ...
-                await interaction.editReply({ // Changed to editReply
+                const uniqueId = customId.replace("delist-", "");
+
+                const itemInfo = messageData.get(uniqueId);
+
+                if (!itemInfo) {
+                    return interaction.reply({
+                        content: "Item not found.",
+                        ephemeral: true,
+                    });
+                }
+
+                // Remove the item listing from the channel
+                const listingMessage = await interaction.channel.messages.fetch(itemInfo.messageId).catch(console.error);
+                if (listingMessage) {
+                    await listingMessage.delete().catch(console.error);
+                }
+
+                // Remove the item from the messageData map
+                messageData.delete(uniqueId);
+                saveData(); // Save data after deleting it
+
+                await interaction.reply({
                     content: "Item listing delisted successfully.",
                     ephemeral: true,
                 });
@@ -127,32 +383,5 @@ client.on("interactionCreate", async (interaction) => {
         });
     }
 });
-
-// Ensure `client.on("messageCreate")` is outside of the `interactionCreate` handler
-client.on("messageCreate", async (message) => {
-    if (message.content.startsWith("!transcript") && message.channel.type === ChannelType.GuildText) {
-        const channel = message.channel;
-        const transcriptChannel = await client.channels.fetch(TRANSCRIPT_CHANNEL_ID);
-
-        if (!transcriptChannel || !transcriptChannel.isTextBased()) {
-            return message.reply("Transcript channel not found.");
-        }
-
-        // Fetch messages from the ticket channel
-        const messages = await channel.messages.fetch({ limit: 100 });
-        const transcript = messages.reverse().map(msg => `${msg.author.tag}: ${msg.content}`).join("\n");
-
-        // Send the transcript to the transcript channel
-        await transcriptChannel.send({
-            content: `**Transcript of ${channel.name}**\n\n${transcript}`,
-        });
-
-        await message.reply("Transcript sent to the specified channel.");
-    }
-});
-
-// Save data on bot disconnection or reconnection
-client.on("shardDisconnect", () => saveData());
-client.on("shardReconnecting", () => saveData());
 
 client.login(process.env.BOT_TOKEN);
