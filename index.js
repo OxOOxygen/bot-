@@ -12,6 +12,7 @@ const {
     TextInputStyle,
     PermissionsBitField,
     ChannelType,
+     AttachmentBuilder,
 } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
@@ -56,7 +57,9 @@ process.on("SIGTERM", () => {
     process.exit();
 });
 
-const SALES_CHANNEL_ID = "1270065059392917504"; // Define the sales channel ID here
+const SALES_CHANNEL_ID = "1272953526045380679";
+const TRANSCRIPT_CHANNEL_ID = "1272953423846838343";
+const command_id = "1266854942791041078";// Define the sales channel ID here
 
 client.once("ready", () => {
     console.log("Bot is online!");
@@ -66,6 +69,7 @@ client.on("interactionCreate", async (interaction) => {
     try {
         if (interaction.isCommand()) {
             if (interaction.commandName === "sell") {
+                console.log(interaction.user)
                 const modal = new ModalBuilder()
                     .setCustomId("sellModal")
                     .setTitle("List an Item for Sale");
@@ -302,7 +306,7 @@ client.on("interactionCreate", async (interaction) => {
                 }
 
                 const ticketChannel = await interaction.guild.channels.create({
-                    name: `ticket-${interaction.user.username}`,
+                    name: `ticket-${interaction.user.username}-${uniqueId}`,
                     type: ChannelType.GuildText,
                     permissionOverwrites: [
                         {
@@ -348,15 +352,20 @@ client.on("interactionCreate", async (interaction) => {
                     ephemeral: true,
                 });
             } else if (customId.startsWith("delist-")) {
+            
                 const uniqueId = customId.replace("delist-", "");
 
                 const itemInfo = messageData.get(uniqueId);
+                
 
                 if (!itemInfo) {
                     return interaction.reply({
                         content: "Item not found.",
                         ephemeral: true,
                     });
+                }
+                if(itemInfo.creatorId !== interaction.user.id){
+                    return;
                 }
 
                 // Remove the item listing from the channel
@@ -383,5 +392,94 @@ client.on("interactionCreate", async (interaction) => {
         });
     }
 });
+client.on("messageCreate", async (message) => {
+    if (message.content === "!transcript") {
+        const channel = message.channel;
+
+        if (!channel.name.startsWith("ticket-")) {
+            return message.reply("This command can only be used in ticket channels.");
+        }
+
+        let messages = [];
+        let fetchedMessages;
+
+        try {
+            do {
+                fetchedMessages = await channel.messages.fetch({
+                    limit: 100,
+                    before: fetchedMessages ? fetchedMessages.last().id : undefined,
+                });
+                messages = messages.concat(Array.from(fetchedMessages.values()));
+            } while (fetchedMessages.size >= 100);
+        } catch (error) {
+            console.error("Error fetching messages for transcript:", error);
+            return message.reply("An error occurred while fetching the transcript.");
+        }
+
+        messages.reverse();
+
+        const transcript = messages.map(msg => `${msg.author.tag}: ${msg.content}`).join("\n");
+
+        // Save the transcript to a file
+        const transcriptFilePath = path.join(__dirname, `transcript-${channel.name}.txt`);
+        fs.writeFileSync(transcriptFilePath, transcript);
+
+        // Send the transcript to the specified channel
+        const transcriptChannel = await message.guild.channels.fetch(TRANSCRIPT_CHANNEL_ID);
+        const attachment = new AttachmentBuilder(transcriptFilePath);
+
+        await transcriptChannel.send({
+            content: `Transcript of ${channel.name}`,
+            files: [attachment],
+        });
+
+        await message.reply("Transcript has been sent to the specified channel.");
+        
+
+        // Fetch and update the listing with "Sold" status
+        const uniqueId = channel.name.split('-').pop(); // Extract uniqueId from channel name
+       
+        const itemInfo = messageData.get(`item-${uniqueId}`);
+        
+
+        if (itemInfo) {
+            
+            const listingMessage = await message.guild.channels.cache
+                .get(command_id)
+                .messages.fetch(itemInfo.messageId)
+                .catch(console.error);
+           
+
+            if (listingMessage) {
+                const embed = listingMessage.embeds[0];
+                const updatedEmbed = EmbedBuilder.from(embed)
+                    .setTitle("💵 Currency Listing - Sold")
+                    .setFooter({ text: "This item has been sold." });
+               
+
+
+                const soldButton = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`sold-${uniqueId}`)
+                        .setLabel("Sold")
+                        .setStyle(ButtonStyle.Secondary)
+                        .setDisabled(true),
+                );
+                
+
+
+                await listingMessage.edit({
+                    embeds: [updatedEmbed],
+                    components: [soldButton],
+                });
+                          }
+                        }
+                    }
+                });
+
+
+    //    await message.reply("Transcript has been sent to the specified channel.");
+  //  }
+//});
 
 client.login(process.env.BOT_TOKEN);
