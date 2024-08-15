@@ -17,6 +17,7 @@ const {
 const fs = require("fs");
 const path = require("path");
 
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -57,9 +58,9 @@ process.on("SIGTERM", () => {
     process.exit();
 });
 
-const SALES_CHANNEL_ID = "1272953526045380679";
-const TRANSCRIPT_CHANNEL_ID = "1272953423846838343";
-const command_id = "1266854942791041078";// Define the sales channel ID here
+const SALES_CHANNEL_ID = "";
+const TRANSCRIPT_CHANNEL_ID = "";
+const command_id = "";// Define the sales channel ID here
 
 client.once("ready", () => {
     console.log("Bot is online!");
@@ -304,25 +305,34 @@ client.on("interactionCreate", async (interaction) => {
                         ephemeral: true,
                     });
                 }
+                const creator = await interaction.guild.members.fetch(itemInfo.creatorId).catch(() => null);
+                const buyer = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+
+                if (!creator || !buyer) {
+                    return interaction.reply({
+                        content: "Invalid user or creator ID. It might be due to the user no longer being in the server.",
+                        ephemeral: true,
+                    });
+                }
 
                 const ticketChannel = await interaction.guild.channels.create({
                     name: `ticket-${interaction.user.username}-${uniqueId}`,
                     type: ChannelType.GuildText,
-                    permissionOverwrites: [
-                        {
-                            id: interaction.guild.id,
-                            deny: [PermissionsBitField.Flags.ViewChannel],
-                        },
-                        {
-                            id: interaction.user.id,
-                            allow: [PermissionsBitField.Flags.ViewChannel],
-                        },
-                        {
-                            id: itemInfo.creatorId,
-                            allow: [PermissionsBitField.Flags.ViewChannel],
-                        },
-                    ],
-                });
+                        permissionOverwrites: [
+                            {
+                                id: interaction.guild.id,
+                                deny: [PermissionsBitField.Flags.ViewChannel],
+                            },
+                            {
+                                id: buyer.id,
+                                allow: [PermissionsBitField.Flags.ViewChannel],
+                            },
+                            {
+                                id: creator.id,
+                                allow: [PermissionsBitField.Flags.ViewChannel],
+                            },
+                        ],
+                    });
 
                 const ticketEmbed = new EmbedBuilder()
                     .setTitle("Ticket Created")
@@ -471,11 +481,12 @@ client.on("messageCreate", async (message) => {
                 await listingMessage.edit({
                     embeds: [updatedEmbed],
                     components: [soldButton],
-                });
+                });fs.rm(transcriptFilePath,()=>console.log(""));
                           }
                         }
                     }
                 });
+
 
 
     //    await message.reply("Transcript has been sent to the specified channel.");
